@@ -11,16 +11,31 @@ object FileIO {
    *         returns empty list if file not found
    */
   def readSubscriptions(filePath: String): List[Option[Subscription]] = {
-    implicit val formats: Formats = DefaultFormats
-    val source = Source.fromFile(filePath)
-    val content = source.mkString
-    source.close()
+    try {
+      implicit val formats: Formats = DefaultFormats
+      val source = Source.fromFile(filePath)
+      val content = source.mkString
+      source.close()
 
-    val json = parse(content)
-    val subscriptions = json.extract[List[Map[String, String]]]
+      val json = parse(content)
+      val subscriptions = json.extract[List[Map[String, String]]]
 
-    subscriptions.map { sub =>
-      Some(Subscription(sub("name"), sub("url")))
+      subscriptions.map { sub =>
+        if (sub.contains("name") && sub.contains("url")) {
+          Some(Subscription(sub("name"), sub("url")))
+        } else {                                                                                  // si le falta url o name, aviso
+          println("Warning: Skipping malformed subscription (missing 'name' or 'url' field)")
+          None 
+        }
+      }
+    } catch {
+        case _: java.io.FileNotFoundException =>
+          println(s"Error: Could not load $filePath - file not found")
+          List()
+        
+        case _: org.json4s.ParserUtil.ParseException =>
+          println(s"Error: Could not load $filePath - invalid JSON format")
+          List()
     }
   }
 
@@ -29,13 +44,17 @@ object FileIO {
    * @param url Reddit feed URL
    * @return Option containing JSON as String, None on network error or timeout
    */
-  def downloadFeed(url: String): Option[String] = {
+def downloadFeed(url: String): Option[String] = {
+  try {
     val source = Source.fromURL(url)
     val content = source.mkString
     source.close()
-    Some(content)
+    Some(content) 
+  } catch {
+    case _: Exception => 
+      None 
   }
-
+}
   /**
    * Read dictionary file line by line.
    * @param filePath path to dictionary file

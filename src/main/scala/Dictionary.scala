@@ -32,20 +32,31 @@ object Dictionary {
     // Check if entities directory exists
     val dataDir = new java.io.File(entitiesDir)
 
-    val peopleOpt = loadFromFile(s"$entitiesDir/people.txt", "Person")
+    if(!dataDir.exists() || !dataDir.isDirectory) {                                     // si la ruta no existe o no es un directorio, error
+      println(s"Error: entities directory '$entitiesDir' not found.") 
+      List()
+    } else {                                                                            // si la carpeta existe, leo los archivos      
 
-    val universitiesOpt = loadFromFile(s"$entitiesDir/universities.txt", "University")
+      val peopleOpt = loadFromFile(s"$entitiesDir/people.txt", "Person")
+      if (peopleOpt.isEmpty) println(s"Warning: Could not load $entitiesDir/people.txt")                // para cada archivo, veo si se pudo leer algo y aviso si no se pudo
 
-    val languagesOpt = loadFromFile(s"$entitiesDir/languages.txt", "ProgrammingLanguage")
+      val universitiesOpt = loadFromFile(s"$entitiesDir/universities.txt", "University")
+      if (universitiesOpt.isEmpty) println(s"Warning: Could not load $entitiesDir/universities.txt")
 
-    val organizationsOpt = loadFromFile(s"$entitiesDir/organizations.txt", "Organization")
+      val languagesOpt = loadFromFile(s"$entitiesDir/languages.txt", "ProgrammingLanguage")
+      if (languagesOpt.isEmpty) println(s"Warning: Could not load $entitiesDir/languages.txt")
 
-    val placesOpt = loadFromFile(s"$entitiesDir/places.txt", "Place")
+      val organizationsOpt = loadFromFile(s"$entitiesDir/organizations.txt", "Organization")
+      if (organizationsOpt.isEmpty) println(s"Warning: Could not load $entitiesDir/organizations.txt")
 
-    peopleOpt.getOrElse(List()) :::
-      universitiesOpt.getOrElse(List()) :::
-      languagesOpt.getOrElse(List()) :::
-      organizationsOpt.getOrElse(List()) :::
-      placesOpt.getOrElse(List())
+      val placesOpt = loadFromFile(s"$entitiesDir/places.txt", "Place")
+      if (placesOpt.isEmpty) println(s"Warning: Could not load $entitiesDir/places.txt")
+
+      peopleOpt.getOrElse(List()) :::
+        universitiesOpt.getOrElse(List()) :::
+        languagesOpt.getOrElse(List()) :::
+        organizationsOpt.getOrElse(List()) :::
+        placesOpt.getOrElse(List())
+    }
   }
 }
