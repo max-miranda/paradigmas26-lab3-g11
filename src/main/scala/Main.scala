@@ -37,8 +37,11 @@ object Main {
     val postsSuccessAcc = sc.longAccumulator("posts exitosos")                          // contador de posts
     val postsFilteredAcc = sc.longAccumulator("posts filtrados")
     val postsFailedAcc = sc.longAccumulator("posts fallidos")
+    val postsTotalAcc = sc.longAccumulator("posts totales")
 
-    val totalCharsAcc = sc.longAccumulator("total de caracteres de posts filtrados")          
+    val totalCharsAcc = sc.longAccumulator("total de caracteres de posts filtrados")
+
+    val preDownload = System.currentTimeMillis()
 
     // Download feeds and parse posts, tracking success/failure
     val downloadResultsRDD: RDD[Post] = subscriptionsRDD.flatMap { subscription =>
@@ -48,6 +51,7 @@ object Main {
         val posts = JsonParser.parsePosts(feedOpt.get, subscription.name, subscription.url)         // parseo los posts
         feedsSuccessAcc.add(1)
         postsSuccessAcc.add(posts.length)
+        postsTotalAcc.add(posts.length)
         val postValidos = Analyzer.filterEmptyPosts(posts)                                          // filtro los que tengan titulo o texto vacio
         
         val filtrados = posts.length - postValidos.length
@@ -56,6 +60,7 @@ object Main {
         if (postValidos.isEmpty) {
           println("Error: No valid posts downloaded after filtering") //Che fijarse si este print hara un error a futuro, porque los workers no deberian usar prints
           postsFailedAcc.add(1)
+          postsTotalAcc.add(1)
         }
 
         postValidos.foreach { post =>
@@ -64,7 +69,7 @@ object Main {
 
         postValidos.toIterator   
 
-      } else { // fallo la descarga del feed
+      } else {                                                                                      // fallo la descarga del feed
         feedsFailedAcc.add(1)
         println(s"Warning: Failed to download from '${subscription.name}' (${subscription.url})")
         List()    
@@ -72,7 +77,9 @@ object Main {
     }
 
     // spark es lazy, si no lo obligo no va a procesar los datos
-    downloadResultsRDD.count() 
+    downloadResultsRDD.collect()
+
+    val postDownload = System.currentTimeMillis()
 
     // Count feed successes/failures
     val feedsSuccess = feedsSuccessAcc.value.toInt
@@ -82,7 +89,8 @@ object Main {
     val postsSuccess = postsSuccessAcc.value.toInt            // todos los posts que se descargaron correctamente
     val postsFiltered = postsFilteredAcc.value.toInt          // posts que fueron filtrados/descartados por tener titulo o texto vacio
     val postsValid = postsSuccess - postsFiltered             // posts validos (con titulo y texto)
-    val postsFailed = postsFailedAcc.value.toInt                            
+    val postsFailed = postsFailedAcc.value.toInt
+    val postsTotal = postsTotalAcc.value.toInt
 
     // Calculate average characters in filtered posts
     val totalChars = totalCharsAcc.value.toInt
@@ -95,40 +103,51 @@ object Main {
       "postsSuccess" -> postsSuccess,
       "postsFailed" -> postsFailed,
       "postsFiltered" -> postsFiltered,
+      "postsTotal" -> postsTotal,
       "avgChars" -> avgChars
     )
 
-    // Print output
+    // Load dictionaries
+    val dictionary = Dictionary.loadAll(cmdArgs.entitiesDir) // Diccionario cargado SOLO en driver
+
+    // El diccionario sera compartido entre los workers, asi no copian el mismo diccionario una y otra vez
+    val brodDictionary = sc.broadcast(dictionary)
+
+    val preEntities = System.currentTimeMillis()
+
+    // Detect entities in all posts (combine title and selftext)
+    val allEntities : RDD[NamedEntity] = downloadResultsRDD.flatMap { post =>
+      val combinedText = post.title + " " + post.selftext
+      Analyzer.detectEntities(combinedText, brodDictionary.value)
+    }
+
+    val pairs = allEntities
+      .map{ e => ((e.entityType, e.text), 1) }
+      .reduceByKey(_ + _)
+      .sortBy{ e => (e._1._1, -e._2) }
+
+    val unformatted = pairs.collect()
+
+    val postEntities = System.currentTimeMillis()
+
+    val totalTimePipeline = ((postEntities - preEntities) + (postDownload - preDownload)) / 1000f
+
     println(Formatters.formatProcessingStats(stats))
+    println(Formatters.formatedEntities(unformatted))
+    println(s"== Tiempo total de Pipelining: ${totalTimePipeline} ==")
+
+    // Count entities
+    /*
+    val entityCounts = Analyzer.countEntities(allEntities)
+    val typeStats = Analyzer.countByType(allEntities)
+
+    val ordered = reduced.sortBy{ e=> -e._2}
+
+    // Es una accion terminal, porque fuerza a Spark a ejecutar el pipeline lazy, osea, terminan el pipeline lazy y devuelven res al driver
+    val formated = ordered.collect() // Array[(String,String), Int])
+    println(Formatters.formatTypeStats(typeStats))
     println()
-
-  // Load dictionaries
-  val dictionary = Dictionary.loadAll(cmdArgs.entitiesDir) // Diccionario cargado SOLO en driver
-
-  val brodDictionary = sc.broadcast(dictionary) // El diccionario sera compartido entre los workers, asi no copian el mismo diccionario una y otra vez
-
-  // Detect entities in all posts (combine title and selftext)
-  val allEntities : RDD[NamedEntity] = downloadResultsRDD.flatMap { post =>
-    val combinedText = post.title + " " + post.selftext
-    Analyzer.detectEntities(combinedText, brodDictionary.value)
-  }
-
-  // B) 
-  val pairs = allEntities.map { // RDD[((String,String),int)]
-    tuple => ((tuple.entityType, tuple.text), 1)
-  }
-
-  // C)
-  val reduced = pairs.reduceByKey(_ + _) // RDD[((String,String),int)]
-  
-  // D)
-
-  val ordered = reduced.sortBy{ e=> -e._2}
-  
-  // Es una accion terminal, porque fuerza a Spark a ejecutar el pipeline lazy, osea, terminan el pipeline lazy y devuelven res al driver
-  val formated = ordered.collect() // Array[(String,String), Int])
-
-  println(Formatters.formatedEntitys(formated))
-
+    println(Formatters.formatEntityStats(entityCounts, cmdArgs.topK))
+    */
   }
 }
