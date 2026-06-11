@@ -11,15 +11,19 @@ object Formatters {
     val postsSuccess = stats.getOrElse("postsSuccess", 0)
     val postsFailed = stats.getOrElse("postsFailed", 0)
     val postsFiltered = stats.getOrElse("postsFiltered", 0)
+    val postsTotal = stats.getOrElse("postsTotal", 0)
     val avgChars = stats.getOrElse("avgChars", 0)
 
-    s"""============ ESTADÍSTICAS DE PROCESAMIENTO ============
+    s"""
+============ ESTADÍSTICAS DE PROCESAMIENTO ============
 Feeds descargados exitosamente: $feedsSuccess
 Feeds fallidos: $feedsFailed
 Posts descargados exitosamente: $postsSuccess
 Posts fallidos: $postsFailed
+Posts totales: $postsTotal
 Posts filtrados (vacíos/nulos): $postsFiltered
-Largo promedio en posts: $avgChars"""
+Largo promedio en posts: $avgChars
+      """
   }
 
   /**
@@ -64,10 +68,9 @@ $typeLines"""
 $formatted"""
   }
 
-  // [TIPO] Entidad: N apariciones
-  def formatedEntitys(formated: Array[((String, String), Int)]): String = {
+  def formatedEntities(formated: Array[((String, String), Int)]): String = {
     formated.map { elem =>
-        s"[${elem._1._1.toUpperCase()}] ${elem._1._2}: ${elem._2} apariciones"
+      s"[${elem._1._1.toUpperCase}] ${elem._1._2}: ${elem._2} apariciones"
     }.mkString("\n")
-}
+  }
 }
