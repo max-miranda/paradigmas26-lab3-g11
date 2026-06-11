@@ -63,4 +63,11 @@ $typeLines"""
     s"""============ ENTIDADES NOMBRADAS MÁS FRECUENTES ============
 $formatted"""
   }
+
+  // [TIPO] Entidad: N apariciones
+  def formatedEntitys(formated: Array[((String, String), Int)]): String = {
+    formated.map { elem =>
+        s"[${elem._1._1.toUpperCase()}] ${elem._1._2}: ${elem._2} apariciones"
+    }.mkString("\n")
+}
 }

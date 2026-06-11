@@ -54,7 +54,7 @@ object Main {
         postsFilteredAcc.add(filtrados)
 
         if (postValidos.isEmpty) {
-          println("Error: No valid posts downloaded after filtering")
+          println("Error: No valid posts downloaded after filtering") //Che fijarse si este print hara un error a futuro, porque los workers no deberian usar prints
           postsFailedAcc.add(1)
         }
 
@@ -64,13 +64,16 @@ object Main {
 
         postValidos.toIterator   
 
-      } else {                                                                                      // fallo la descarga del feed
+      } else { // fallo la descarga del feed
         feedsFailedAcc.add(1)
         println(s"Warning: Failed to download from '${subscription.name}' (${subscription.url})")
         List()    
       } 
     }
-    downloadResultsRDD.count()                                                                      // spark es lazy, si no lo obligo no va a procesar los datos
+
+    // spark es lazy, si no lo obligo no va a procesar los datos
+    downloadResultsRDD.count() 
+
     // Count feed successes/failures
     val feedsSuccess = feedsSuccessAcc.value.toInt
     val feedsFailed = feedsFailedAcc.value.toInt
@@ -99,24 +102,33 @@ object Main {
     println(Formatters.formatProcessingStats(stats))
     println()
 
+  // Load dictionaries
+  val dictionary = Dictionary.loadAll(cmdArgs.entitiesDir) // Diccionario cargado SOLO en driver
 
+  val brodDictionary = sc.broadcast(dictionary) // El diccionario sera compartido entre los workers, asi no copian el mismo diccionario una y otra vez
 
-    // Load dictionaries
-   val dictionary = Dictionary.loadAll(cmdArgs.entitiesDir)
+  // Detect entities in all posts (combine title and selftext)
+  val allEntities : RDD[NamedEntity] = downloadResultsRDD.flatMap { post =>
+    val combinedText = post.title + " " + post.selftext
+    Analyzer.detectEntities(combinedText, brodDictionary.value)
+  }
 
-    // Detect entities in all posts (combine title and selftext)
-    val allEntities = filteredPosts.flatMap { post =>
-      val combinedText = post.title + " " + post.selftext
-      Analyzer.detectEntities(combinedText, dictionary)
-    }
+  // B) 
+  val pairs = allEntities.map { // RDD[((String,String),int)]
+    tuple => ((tuple.entityType, tuple.text), 1)
+  }
 
-    // Count entities
-    val entityCounts = Analyzer.countEntities(allEntities)
-    val typeStats = Analyzer.countByType(allEntities)
+  // C)
+  val reduced = pairs.reduceByKey(_ + _) // RDD[((String,String),int)]
+  
+  // D)
 
-    println(Formatters.formatTypeStats(typeStats))
-    println()
-    println(Formatters.formatEntityStats(entityCounts, cmdArgs.topK))
+  val ordered = reduced.sortBy{ e=> -e._2}
+  
+  // Es una accion terminal, porque fuerza a Spark a ejecutar el pipeline lazy, osea, terminan el pipeline lazy y devuelven res al driver
+  val formated = ordered.collect() // Array[(String,String), Int])
+
+  println(Formatters.formatedEntitys(formated))
 
   }
 }
