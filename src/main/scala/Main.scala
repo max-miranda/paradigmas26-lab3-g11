@@ -74,10 +74,10 @@ object Main {
         println(s"Warning: Failed to download from '${subscription.name}' (${subscription.url})")
         List()    
       } 
-    }
+    }.cache()
 
     // spark es lazy, si no lo obligo no va a procesar los datos
-    downloadResultsRDD.collect()
+    downloadResultsRDD.count()
 
     val postDownload = System.currentTimeMillis()
 
@@ -127,6 +127,8 @@ object Main {
       .sortBy{ e => (e._1._1, -e._2) }
 
     val unformatted = pairs.collect()
+
+    downloadResultsRDD.unpersist()
 
     val postEntities = System.currentTimeMillis()
 
