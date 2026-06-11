@@ -29,16 +29,14 @@ object Dictionary {
    * @return combined list of all entities from all successfully loaded dictionaries
    */
   def loadAll(entitiesDir: String): List[NamedEntity] = {
-    // Check if entities directory exists
     val dataDir = new java.io.File(entitiesDir)
 
-    if(!dataDir.exists() || !dataDir.isDirectory) {                                     // si la ruta no existe o no es un directorio, error
-      println(s"Error: entities directory '$entitiesDir' not found.") 
+    if (!dataDir.exists() || !dataDir.isDirectory) {
+      println(s"Error: entities directory '$entitiesDir' not found")
       List()
-    } else {                                                                            // si la carpeta existe, leo los archivos      
-
+    } else {
       val peopleOpt = loadFromFile(s"$entitiesDir/people.txt", "Person")
-      if (peopleOpt.isEmpty) println(s"Warning: Could not load $entitiesDir/people.txt")                // para cada archivo, veo si se pudo leer algo y aviso si no se pudo
+      if (peopleOpt.isEmpty) println(s"Warning: Could not load $entitiesDir/people.txt")
 
       val universitiesOpt = loadFromFile(s"$entitiesDir/universities.txt", "University")
       if (universitiesOpt.isEmpty) println(s"Warning: Could not load $entitiesDir/universities.txt")

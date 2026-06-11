@@ -60,17 +60,16 @@ $typeLines"""
       }
       .take(topK)
 
-    val formatted = sorted.map { case ((entityType, entityName), count) =>
-      s"[Type=$entityType] $entityName: $count apariciones"
-    }.mkString("\n")
-
-    s"""============ ENTIDADES NOMBRADAS MÁS FRECUENTES ============
-$formatted"""
+    formatedEntities(sorted.toArray)
   }
 
   def formatedEntities(formated: Array[((String, String), Int)]): String = {
-    formated.map { elem =>
-      s"[${elem._1._1.toUpperCase}] ${elem._1._2}: ${elem._2} apariciones"
-    }.mkString("\n")
+    if (formated.isEmpty) {
+      "No named entities found"
+    } else {
+      formated.map { elem =>
+        s"[${elem._1._1.toUpperCase}] ${elem._1._2}: ${elem._2} apariciones"
+      }.mkString("\n")
+    }
   }
 }

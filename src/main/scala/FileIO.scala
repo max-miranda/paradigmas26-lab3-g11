@@ -1,4 +1,5 @@
 import scala.io.Source
+import scala.util.Using
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
@@ -13,29 +14,33 @@ object FileIO {
   def readSubscriptions(filePath: String): List[Option[Subscription]] = {
     try {
       implicit val formats: Formats = DefaultFormats
-      val source = Source.fromFile(filePath)
-      val content = source.mkString
-      source.close()
+      val content = Using.resource(Source.fromFile(filePath)) { source =>
+        source.mkString
+      }
 
-      val json = parse(content)
-      val subscriptions = json.extract[List[Map[String, String]]]
+      parse(content).children.map { sub =>
+        val nameOpt = (sub \ "name").extractOpt[String]
+        val urlOpt = (sub \ "url").extractOpt[String]
 
-      subscriptions.map { sub =>
-        if (sub.contains("name") && sub.contains("url")) {
-          Some(Subscription(sub("name"), sub("url")))
-        } else {                                                                                  // si le falta url o name, aviso
-          println("Warning: Skipping malformed subscription (missing 'name' or 'url' field)")
-          None 
+        (nameOpt, urlOpt) match {
+          case (Some(name), Some(url)) => Some(Subscription(name, url))
+          case _ =>
+            println("Warning: Skipping malformed subscription (missing 'name' or 'url' field)")
+            None
         }
       }
     } catch {
-        case _: java.io.FileNotFoundException =>
-          println(s"Error: Could not load $filePath - file not found")
-          List()
-        
-        case _: org.json4s.ParserUtil.ParseException =>
-          println(s"Error: Could not load $filePath - invalid JSON format")
-          List()
+      case _: java.io.FileNotFoundException =>
+        println(s"Error: Could not load $filePath - file not found")
+        List()
+
+      case _: org.json4s.ParserUtil.ParseException =>
+        println(s"Error: Could not load $filePath - invalid JSON format")
+        List()
+
+      case _: Exception =>
+        println(s"Error: Could not load $filePath - invalid JSON format")
+        List()
     }
   }
 
@@ -44,30 +49,32 @@ object FileIO {
    * @param url Reddit feed URL
    * @return Option containing JSON as String, None on network error or timeout
    */
-def downloadFeed(url: String): Option[String] = {
-  try {
-    val source = Source.fromURL(url)
-    val content = source.mkString
-    source.close()
-    Some(content) 
-  } catch {
-    case _: Exception => 
-      None 
+  def downloadFeed(url: String): Option[String] = {
+    try {
+      Some(Using.resource(Source.fromURL(url)) { source =>
+        source.mkString
+      })
+    } catch {
+      case _: Exception => None
+    }
   }
-}
+
   /**
    * Read dictionary file line by line.
    * @param filePath path to dictionary file
-   * @return Option containing list of entities, None if file missing
+   * @return Option containing list of entities, None if file missing or unreadable
    */
   def readDictionaryFile(filePath: String): Option[List[String]] = {
-    val source = Source.fromFile(filePath)
-    val lines = source.getLines()
-      .map(_.trim)
-      .filter(_.nonEmpty)
-      .filterNot(_.startsWith("#"))
-      .toList
-    source.close()
-    Some(lines)
+    try {
+      Some(Using.resource(Source.fromFile(filePath)) { source =>
+        source.getLines()
+          .map(_.trim)
+          .filter(_.nonEmpty)
+          .filterNot(_.startsWith("#"))
+          .toList
+      })
+    } catch {
+      case _: Exception => None
+    }
   }
 }

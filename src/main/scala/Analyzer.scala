@@ -8,24 +8,28 @@ object Analyzer {
    */
   def filterEmptyPosts(posts: List[Post]): List[Post] = {
     posts.filter { post =>
-      post.title.nonEmpty &&
-      post.selftext.nonEmpty &&
-      post.selftext.trim.nonEmpty
+      Option(post.title).exists(_.trim.nonEmpty) &&
+      Option(post.selftext).exists(_.trim.nonEmpty)
     }
   }
 
   /**
    * Detect entities from dictionary that appear in the given text.
-   * Matching is case-insensitive, whole-word only (no partial matches).
-   * "Java" does not match "javascript"; "Scala" does not match "ScalaTest".
+   * Matching is case-insensitive, whole-entity only, and supports multi-word entities.
    * @param text text to search (e.g., post title or content)
    * @param dictionary list of known entities to match against
-   * @return list of entities found in text (can include duplicates)
+   * @return list of entity appearances found in text
    */
   def detectEntities(text: String, dictionary: List[NamedEntity]): List[NamedEntity] = {
-    val words = text.toLowerCase.split("\\s+").toSet
-    dictionary.filter { entity =>
-      words.contains(entity.text.toLowerCase)
+    dictionary.flatMap { entity =>
+      val escapedEntity = entity.text.trim
+        .split("\\s+")
+        .filter(_.nonEmpty)
+        .map(java.util.regex.Pattern.quote)
+        .mkString("\\s+")
+
+      val regex = s"(?i)(?<![\\p{Alnum}_])$escapedEntity(?![\\p{Alnum}_])".r
+      regex.findAllIn(text).map(_ => entity).toList
     }
   }
 
