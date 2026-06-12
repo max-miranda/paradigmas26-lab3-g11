@@ -1,5 +1,5 @@
 # Laboratorio 3 Paradigmas de la programacion; Procesamiento distribuido Apache Spark
-## Jerez Sofia; Oneto Yamila; Miranda Maximo; Moyano Valentin
+## Jerez Sofia; Oneto Yamila; Miranda Maximo; Diaz Valentin
 
 ## Ejercicio 1
 
@@ -36,3 +36,29 @@ Se dice que ``reduceByKey`` es una barrera de sincronizacion porque para ejecuta
 En el codigo se puede ver que ``reduceByKey`` espera cada par que proceso cada worker y dependiendo del entidad, ``reduceByKey`` lo mandara al worker encargado para esa entidad (este mecanismo se llama shuffle) y se logra la suma final.
 
 Previo a usar el ``reduceByKey`` necesito trabajar con el diccionario, este diccionario es cargado solamente en el driver y distribuido a los workers cuando es necesario, si no tuviera broadcast, el driver le daria una copia del dato a cada worker, como uso ``.broadcast()`` el driver hace que el dato sea accesible unicamente por lectura, asi que los workers consultaran el valor cuando sea necesario, broadcast existe para hacer todo el flujo mas eficiente.
+
+## Ejercicio 5
+
+Sobre ``cache()``
+
+En nuestro proyecto usamos ``cache()`` sobre ``downloadResultsRDD`` porque ese RDD representa el resultado de una etapa costosa porque incluye descargar los feeds, parsearlos y filtrar los posts validos. Si no llamaramos a ``cache()``, Spark podria recomputar toda la cadena de transformaciones que produce ese RDD cada vez que una accion necesite sus datos.
+
+Esto es importante porque Spark trabaja de forma lazy: las transformaciones no guardan automaticamente sus resultados. Entonces, si primero hacemos una accion como ``downloadResultsRDD.count()`` para materializar la descarga y despues usamos ``downloadResultsRDD`` para detectar entidades, sin ``cache()`` Spark podria volver a ejecutar la descarga de feeds desde el principio.
+
+En ese caso, la descarga podria ejecutarse mas de una vez. En nuestro flujo concreto, se ejecutaria al menos una vez para ``downloadResultsRDD.count()`` y podria volver a ejecutarse cuando se fuerza la accion final ``pairs.collect()``. Por eso cacheamos el RDD de posts, porque asi la descarga, el parseo y el filtrado se hagan una sola vez y los siguientes pasos reutilicen el resultado ya materializado.
+
+Sobre ``collect()`` entre pasos del pipeline
+
+Seria incorrecto llamar a ``collect()`` entre los pasos de deteccion y conteo de entidades, por ejemplo despues del ``flatMap`` que obtiene las entidades y antes del ``map`` que arma los pares ``((tipo, nombre), 1)``. ``collect()`` trae todos los datos desde los workers al driver, por lo que se perderia la distribucion del trabajo.
+
+Si hicieramos eso, el driver recibiria todas las entidades como una coleccion local y los pasos siguientes ya no se ejecutarian distribuidos sobre un ``RDD``. Es decir, dejariamos de aprovechar Spark justo antes de una etapa importante del problema, que es el conteo global de entidades. Ademas, si hubiera muchos posts o muchas entidades, traer todo al driver podria generar problemas de memoria.
+
+Por eso en nuestro codigo ``collect()`` se usa al final, cuando ya se hizo el ``reduceByKey`` y el resultado ya esta agregado. En ese punto el volumen de datos es mucho menor que el conjunto original de posts y tiene sentido traerlo al driver para formatearlo e imprimirlo.
+
+Sobre lazy evaluation de ``cache()``
+
+``cache()`` tambien es lazy. Esto significa que llamar a ``downloadResultsRDD.cache()`` no descarga feeds ni guarda datos inmediatamente en memoria. Solamente le indica a Spark que, cuando ese RDD sea calculado por primera vez, conviene conservar sus particiones para reutilizarlas.
+
+El RDD se almacena realmente en memoria cuando se ejecuta una accion que obliga a computarlo. En nuestro caso, eso ocurre con ``downloadResultsRDD.count()``. Esa accion fuerza a Spark a recorrer las suscripciones, descargar los feeds, parsear los posts, filtrarlos y materializar ``downloadResultsRDD``. A partir de ahi, las siguientes operaciones que dependan de ese RDD pueden reutilizar los datos cacheados en vez de recomputarlos.
+
+Finalmente, cuando ya no necesitamos mas ese RDD, llamamos a ``downloadResultsRDD.unpersist()`` para liberar la memoria usada por Spark.
