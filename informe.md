@@ -3,6 +3,18 @@
 
 ## Ejercicio 1
 
+Sobre abstracciones de Spark **(pregunta b):**
+
+En el pipeline que se encuentra en ``Main.scala``, se utiliza ``flatMap`` para guardar los posts de cada feed descargado en una constante de tipo ``RDD[Post]``. Se usa ``flatMap`` porque cada suscripcion puede generar una cantidad variable de posts, o incluso ninguno si falla la descarga o si todos los posts son filtrados. El trabajo que se realiza dentro de este ``flatMap`` sera paralelizado por Spark.
+
+De manera muy similar, ``flatMap`` tambien es utilizado para detectar entidades en los posts. En este caso, cada post puede contener cero, una o varias entidades, por lo que nuevamente tiene sentido usar ``flatMap``. Esta etapa tambien es paralelizable porque la deteccion de entidades de un post no depende de la deteccion realizada en otros posts.
+
+La funcion ``map`` se utiliza para transformar cada entidad detectada en un par de la forma ``((tipo, nombre), 1)``. Esto se hace para preparar los datos para el conteo, porque luego ``reduceByKey`` puede agrupar todos los pares que tengan la misma clave y sumar sus valores.
+
+Se utiliza ``reduceByKey`` para agrupar las entidades que se detectaron previamente y obtener la cantidad total de apariciones de cada una. En nuestro caso, la clave es ``(entityType, text)``, por lo que se cuentan por separado las entidades segun su tipo y su nombre.
+
+Hay algunos pasos del pipeline que no encajan directamente en ``map``, ``flatMap`` o ``reduceByKey`` porque no son transformaciones distribuidas sobre los datos, sino acciones, configuraciones o tareas que corresponden al driver. Por ejemplo, la lectura de argumentos, la carga inicial del archivo de suscripciones, la creacion de la ``SparkSession`` y la carga del diccionario ocurren en el driver antes de distribuir el trabajo. Tambien ``count()`` y ``collect()`` no son transformaciones sino acciones, porque fuerzan la ejecucion del pipeline y devuelven informacion al driver. Por ultimo, ``cache()`` tampoco transforma los datos, sino que le indica a Spark que conserve el RDD calculado para no recomputarlo en acciones posteriores.
+
 Sobre barrera de sincronizacion **(pregunta c):**
 
 En nuestro proyecto, todo lo que implica la descarga de los feeds (descarga, parseo de los posts y filtrado) se hace de forma paralela. Una vez realizada la descarga, 
