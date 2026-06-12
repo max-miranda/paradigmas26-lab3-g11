@@ -138,18 +138,7 @@ object Main {
     println(Formatters.formatedEntities(unformatted))
     println(s"== Tiempo total de Pipelining: ${totalTimePipeline} ==")
 
-    // Count entities
-    /*
-    val entityCounts = Analyzer.countEntities(allEntities)
-    val typeStats = Analyzer.countByType(allEntities)
-
-    val ordered = reduced.sortBy{ e=> -e._2}
-
-    // Es una accion terminal, porque fuerza a Spark a ejecutar el pipeline lazy, osea, terminan el pipeline lazy y devuelven res al driver
-    val formated = ordered.collect() // Array[(String,String), Int])
-    println(Formatters.formatTypeStats(typeStats))
-    println()
-    println(Formatters.formatEntityStats(entityCounts, cmdArgs.topK))
-    */
+    // paro spark para cerrar la sesión Spark, liberar memoria, cerrar conexiones, etc
+    spark.stop()
   }
 }

@@ -1,7 +1,17 @@
 # Laboratorio 3 Paradigmas de la programacion; Procesamiento distribuido Apache Spark
 ## Jerez Sofia; Oneto Yamila; Miranda Maximo; Diaz Valentin
 
+---
 ## Ejercicio 1
+### Diagrama sin Spark
+![diagramasinspark.png](src/main/resources/diagramasinspark.png)
+
+---
+
+### Diagrama con Spark
+![diagramaconspark.png](src/main/resources/diagramaconspark.png)
+
+---
 
 Sobre abstracciones de Spark **(pregunta b):**
 
@@ -48,6 +58,29 @@ Se dice que ``reduceByKey`` es una barrera de sincronizacion porque para ejecuta
 En el codigo se puede ver que ``reduceByKey`` espera cada par que proceso cada worker y dependiendo del entidad, ``reduceByKey`` lo mandara al worker encargado para esa entidad (este mecanismo se llama shuffle) y se logra la suma final.
 
 Previo a usar el ``reduceByKey`` necesito trabajar con el diccionario, este diccionario es cargado solamente en el driver y distribuido a los workers cuando es necesario, si no tuviera broadcast, el driver le daria una copia del dato a cada worker, como uso ``.broadcast()`` el driver hace que el dato sea accesible unicamente por lectura, asi que los workers consultaran el valor cuando sea necesario, broadcast existe para hacer todo el flujo mas eficiente.
+
+---
+
+## Ejercicio 4
+Un Accumulator es una variable compartida que crea el driver y que los workers pueden modificar (solo aumentando el valor almacenado) durante la ejecución de tareas paralelas, generando un solo resultado en el driver.
+
+Es distinto a un contador ya que, con este, Spark serializaria una *copia* de `contador` para cada worker, los cuales incrementarían su propia copia local. Esos cambios nunca vuelven al driver, haciendo que `contador` en este siga siendo 0.
+
+Los `Accumulators` solo deben utilizarse para métricas. Esto es así ya que, como Spark puede re-ejecutar tareas, ya sea por fallos o re-cómputo, no se garantiza la confiabilidad del valor. En esos casos nombrados, el `add()` se aplicaría más de una vez, aumentando erroneamente el valor del Accumulator.
+
+Tampoco es buena idea usarlos para decisiones lógicas, por ejemplo:
+
+```scala
+    if(accumulator.value > x) { ... }
+```
+
+Ese `accumulator.value` puede estar incompleto, ya que las transformaciones son lazy; se esperaría que luego de (por ejemplo) un `flatMap`, se llame a un `count()` o cualquier otra operación que fuerce la ejecución de este, lo que garantiza que todos los `add()` aplicados a ese Accumulator dentro de ese `flatMap` se ejecutaron correctamente y que el valor del Accumulator puede ser leido por el driver.
+Esto provocaría que esta decisión basada en el valor fuera no determinista, rompiendo la idea de que un mismo input produce siempre el mismo output.
+
+### Captura de pantalla de SparkUI
+mostrando las operaciones de los workers, la duración, etc.
+![UI de Spark](src/main/resources/sparkui.png)
+
 
 ## Ejercicio 5
 
